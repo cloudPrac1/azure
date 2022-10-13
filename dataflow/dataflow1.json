@@ -1,0 +1,142 @@
+{
+	"name": "dataflow1",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "RestResource1",
+						"type": "DatasetReference"
+					},
+					"name": "source1"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "DelimitedText1",
+						"type": "DatasetReference"
+					},
+					"name": "sink1"
+				}
+			],
+			"transformations": [
+				{
+					"name": "ExtractBody",
+					"description": "Extracting essential columns from body"
+				},
+				{
+					"name": "RemoveBodyHeader",
+					"description": "Removing header and body from ExtractBody"
+				},
+				{
+					"name": "ConcatSameRowElement",
+					"description": "Concat same row elements as string and forming string array"
+				},
+				{
+					"name": "RemovingColumns",
+					"description": "Removing rest of the elements only keeping concat"
+				},
+				{
+					"name": "FlatteningConcat"
+				},
+				{
+					"name": "ParseString",
+					"description": "Parsing the columns  'ParseConcat'"
+				},
+				{
+					"name": "RemovingUnwantedCol"
+				},
+				{
+					"name": "ExtractingRequiredCol"
+				},
+				{
+					"name": "KeepingEssentialCol"
+				}
+			],
+			"scriptLines": [
+				"source(output(",
+				"          body as (Area as string[], BonusMalus as short[], ClaimNb as boolean[], Density as short[], DrivAge as short[], Exposure as double[], IDpol as double[], Region as string[], VehAge as boolean[], VehBrand as string[], VehGas as string[], VehPower as short[]),",
+				"          headers as [string,string]",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     httpMethod: 'GET',",
+				"     timeout: 30,",
+				"     requestInterval: 0,",
+				"     paginationRules: ['supportRFC5988' -> 'true'],",
+				"     responseFormat: ['type' -> 'json', 'documentForm' -> 'documentPerLine']) ~> source1",
+				"source1 derive(IDpol = body.IDpol,",
+				"          ClaimNb = body.ClaimNb,",
+				"          Exposure = body.Exposure,",
+				"          Area = body.Area,",
+				"          VehPower = body.VehPower,",
+				"          VehAge = body.VehAge,",
+				"          DrivAge = body.DrivAge) ~> ExtractBody",
+				"ExtractBody select(mapColumn(",
+				"          IDpol,",
+				"          ClaimNb,",
+				"          Exposure,",
+				"          Area,",
+				"          VehPower,",
+				"          VehAge,",
+				"          DrivAge",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> RemoveBodyHeader",
+				"RemoveBodyHeader derive(Concat = mapIndex(IDpol, concatWS(',',toString(#item),toString(at(ClaimNb,toInteger(#index))),toString(at(Exposure,toInteger(#index))),toString(at(Area,toInteger(#index))),toString(at(VehPower,toInteger(#index))),toString(at(VehAge,toInteger(#index))),toString(at(DrivAge,toInteger(#index)))))) ~> ConcatSameRowElement",
+				"ConcatSameRowElement select(mapColumn(",
+				"          Concat",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> RemovingColumns",
+				"RemovingColumns foldDown(unroll(Concat),",
+				"     mapColumn(",
+				"          Concat",
+				"     ),",
+				"     skipDuplicateMapInputs: false,",
+				"     skipDuplicateMapOutputs: false) ~> FlatteningConcat",
+				"FlatteningConcat parse(ParseConcat = Concat ? (IDpol as string,",
+				"          ClaimNb as string,",
+				"          Exposure as string,",
+				"          Area as string,",
+				"          VehPower as string,",
+				"          VehAge as string,",
+				"          DrivAge as string),",
+				"     format: 'delimited',",
+				"     columnNamesAsHeader: false,",
+				"     columnDelimiter: ',',",
+				"     nullValue: '') ~> ParseString",
+				"ParseString select(mapColumn(",
+				"          ParseConcat",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> RemovingUnwantedCol",
+				"RemovingUnwantedCol derive(IDpol = ParseConcat.IDpol,",
+				"          ClaimNb = ParseConcat.ClaimNb,",
+				"          Exposure = ParseConcat.Exposure,",
+				"          Area = ParseConcat.Area,",
+				"          VehPower = ParseConcat.VehPower,",
+				"          VehAge = ParseConcat.VehAge,",
+				"          DrivAge = ParseConcat.DrivAge) ~> ExtractingRequiredCol",
+				"ExtractingRequiredCol select(mapColumn(",
+				"          IDpol,",
+				"          ClaimNb,",
+				"          Exposure,",
+				"          Area,",
+				"          VehPower,",
+				"          VehAge,",
+				"          DrivAge",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> KeepingEssentialCol",
+				"KeepingEssentialCol sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     partitionBy('hash', 1)) ~> sink1"
+			]
+		}
+	}
+}
